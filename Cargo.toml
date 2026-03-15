@@ -4,3 +4,7 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0"
+fdk-aac = "0.8"
+libpulse-binding = "2.30"
+libpulse-simple-binding = "2.29"
