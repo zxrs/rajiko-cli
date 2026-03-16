@@ -1,13 +1,13 @@
 use std::fmt::Display;
 
 pub enum Area {
-    HokkaidoTohoku(HokkaidoTohoku),
-    Kanto(Kanto),
-    HokurikuKoshinetsu(HokurikuKoshinetsu),
-    Chubu(Chubu),
-    Kinki(Kinki),
-    ChugokuShikoku(ChugokuShikoku),
-    KyusyuOkinawa(KyusyuOkinawa),
+    HokkaidoTohoku([Pref; 7]),
+    Kanto([Pref; 7]),
+    HokurikuKoshinetsu([Pref; 6]),
+    Chubu([Pref; 4]),
+    Kinki([Pref; 6]),
+    ChugokuShikoku([Pref; 9]),
+    KyusyuOkinawa([Pref; 8]),
 }
 
 impl Display for Area {
@@ -26,22 +26,7 @@ impl Display for Area {
 }
 
 const AREA: [Area; 7] = [
-    Area::HokkaidoTohoku(HOKKAIDO_TOHOKU),
-    Area::Kanto(KANTO),
-    Area::HokurikuKoshinetsu(HOKURIKU_KOSHINETSU),
-    Area::Chubu(CHUBU),
-    Area::Kinki(KINKI),
-    Area::ChugokuShikoku(CHUGOKU_SHIKOKU),
-    Area::KyusyuOkinawa(KYUSYU_OKINAWA),
-];
-
-#[derive(Debug)]
-pub struct HokkaidoTohoku {
-    prefs: [Pref; 7],
-}
-
-const HOKKAIDO_TOHOKU: HokkaidoTohoku = HokkaidoTohoku {
-    prefs: [
+    Area::HokkaidoTohoku([
         Pref::Hokkaido,
         Pref::Aomori,
         Pref::Iwate,
@@ -49,16 +34,8 @@ const HOKKAIDO_TOHOKU: HokkaidoTohoku = HokkaidoTohoku {
         Pref::Akita,
         Pref::Yamagata,
         Pref::Fukushima,
-    ],
-};
-
-#[derive(Debug)]
-pub struct Kanto {
-    prefs: [Pref; 7],
-}
-
-const KANTO: Kanto = Kanto {
-    prefs: [
+    ]),
+    Area::Kanto([
         Pref::Ibaraki,
         Pref::Tochigi,
         Pref::Gunma,
@@ -66,56 +43,25 @@ const KANTO: Kanto = Kanto {
         Pref::Chiba,
         Pref::Tokyo,
         Pref::Kanagawa,
-    ],
-};
-
-pub struct HokurikuKoshinetsu {
-    prefs: [Pref; 6],
-}
-
-const HOKURIKU_KOSHINETSU: HokurikuKoshinetsu = HokurikuKoshinetsu {
-    prefs: [
+    ]),
+    Area::HokurikuKoshinetsu([
         Pref::Niigata,
         Pref::Yamanashi,
         Pref::Nagano,
         Pref::Ishikawa,
         Pref::Toyama,
         Pref::Fukui,
-    ],
-};
-
-#[derive(Debug)]
-pub struct Chubu {
-    prefs: [Pref; 4],
-}
-
-const CHUBU: Chubu = Chubu {
-    prefs: [Pref::Aichi, Pref::Gifu, Pref::Shizuoka, Pref::Mie],
-};
-
-#[derive(Debug)]
-pub struct Kinki {
-    prefs: [Pref; 6],
-}
-
-const KINKI: Kinki = Kinki {
-    prefs: [
+    ]),
+    Area::Chubu([Pref::Aichi, Pref::Gifu, Pref::Shizuoka, Pref::Mie]),
+    Area::Kinki([
         Pref::Osaka,
         Pref::Hyogo,
         Pref::Kyoto,
         Pref::Shiga,
         Pref::Nara,
         Pref::Wakayama,
-    ],
-};
-
-#[derive(Debug)]
-pub struct ChugokuShikoku {
-    prefs: [Pref; 9],
-}
-
-const CHUGOKU_SHIKOKU: ChugokuShikoku = ChugokuShikoku {
-    prefs: [
+    ]),
+    Area::ChugokuShikoku([
         Pref::Okayama,
         Pref::Hiroshima,
         Pref::Tottori,
@@ -125,16 +71,8 @@ const CHUGOKU_SHIKOKU: ChugokuShikoku = ChugokuShikoku {
         Pref::Tokushima,
         Pref::Ehime,
         Pref::Kochi,
-    ],
-};
-
-#[derive(Debug)]
-pub struct KyusyuOkinawa {
-    prefs: [Pref; 8],
-}
-
-const KYUSYU_OKINAWA: KyusyuOkinawa = KyusyuOkinawa {
-    prefs: [
+    ]),
+    Area::KyusyuOkinawa([
         Pref::Fukuoka,
         Pref::Saga,
         Pref::Nagasaki,
@@ -143,8 +81,8 @@ const KYUSYU_OKINAWA: KyusyuOkinawa = KyusyuOkinawa {
         Pref::Miyazaki,
         Pref::Kagoshima,
         Pref::Okinawa,
-    ],
-};
+    ]),
+];
 
 #[derive(Debug, Clone, Copy)]
 pub enum Pref {
