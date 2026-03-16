@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, num::Wrapping};
 
 pub enum Area {
     HokkaidoTohoku([Pref; 7]),
@@ -146,4 +146,59 @@ pub enum Pref {
     Miyazaki,
     Kagoshima,
     Okinawa,
+}
+
+impl Display for Pref {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        use Pref::*;
+        match self {
+            Hokkaido => f.write_str("北海道"),
+            Aomori => f.write_str("青森"),
+            Iwate => f.write_str("岩手"),
+            Miyagi => f.write_str("宮城"),
+            Akita => f.write_str("秋田"),
+            Yamagata => f.write_str("山形"),
+            Fukushima => f.write_str("福島"),
+            Ibaraki => f.write_str("茨城"),
+            Tochigi => f.write_str("栃木"),
+            Gunma => f.write_str("群馬"),
+            Saitama => f.write_str("埼玉"),
+            Chiba => f.write_str("千葉"),
+            Tokyo => f.write_str("東京"),
+            Kanagawa => f.write_str("神奈川"),
+            Niigata => f.write_str("新潟"),
+            Yamanashi => f.write_str("山梨"),
+            Nagano => f.write_str("長野"),
+            Ishikawa => f.write_str("石川"),
+            Toyama => f.write_str("富山"),
+            Fukui => f.write_str("福井"),
+            Aichi => f.write_str("愛知"),
+            Gifu => f.write_str("岐阜"),
+            Shizuoka => f.write_str("静岡"),
+            Mie => f.write_str("三重"),
+            Osaka => f.write_str("大阪"),
+            Hyogo => f.write_str("兵庫"),
+            Kyoto => f.write_str("京都"),
+            Shiga => f.write_str("滋賀"),
+            Nara => f.write_str("奈良"),
+            Wakayama => f.write_str("和歌山"),
+            Okayama => f.write_str("岡山"),
+            Hiroshima => f.write_str("広島"),
+            Tottori => f.write_str("鳥取"),
+            Shimane => f.write_str("島根"),
+            Yamaguchi => f.write_str("山口"),
+            Kagawa => f.write_str("香川"),
+            Tokushima => f.write_str("徳島"),
+            Ehime => f.write_str("愛媛"),
+            Kochi => f.write_str("高知"),
+            Fukuoka => f.write_str("福岡"),
+            Saga => f.write_str("佐賀"),
+            Nagasaki => f.write_str("長崎"),
+            Kumamoto => f.write_str("熊本"),
+            Oita => f.write_str("大分"),
+            Miyazaki => f.write_str("宮崎"),
+            Kagoshima => f.write_str("鹿児島"),
+            Okinawa => f.write_str("沖縄"),
+        }
+    }
 }
