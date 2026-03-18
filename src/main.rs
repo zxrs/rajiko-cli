@@ -1,8 +1,10 @@
 mod login;
 mod prefecture;
 
+use anyhow::Result;
 use login::login;
 
-fn main() {
-    println!("Hello, world!");
+fn main() -> Result<()> {
+    let token = login()?;
+    Ok(())
 }
