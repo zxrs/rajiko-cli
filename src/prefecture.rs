@@ -85,6 +85,14 @@ pub struct Prefecture {
     location: (f32, f32),
 }
 
+impl Prefecture {
+    pub fn gen_gps(&self) -> String {
+        let lat = self.location.0 + rand::random_range(-0.025..0.025);
+        let long = self.location.1 + rand::random_range(-0.025..0.025);
+        format!("{:.6},{:.6},pgs", lat, long)
+    }
+}
+
 const HOKKAIDO: Prefecture = Prefecture {
     id: "JP1",
     name: "北海道",

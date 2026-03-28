@@ -7,7 +7,7 @@ use reqwest::blocking::Client;
 const AUTH1_URL: &str = "https://radiko.jp/v2/api/auth1";
 const AUTH2_URL: &str = "https://radiko.jp/v2/api/auth2";
 
-pub struct Token {}
+pub struct Token(String);
 
 pub fn login(pref: Prefecture) -> Result<Token> {
     let info = generate_randam_info();
@@ -19,8 +19,8 @@ pub fn login(pref: Prefecture) -> Result<Token> {
         .get(AUTH1_URL)
         .header("X-Radiko-App", info.app_version.1)
         .header("X-Radiko-App-Version", info.app_version.0)
-        .header("X-Radiko-Device", info.device)
-        .header("X-Radiko-User", info.user_id)
+        .header("X-Radiko-Device", &info.device)
+        .header("X-Radiko-User", &info.user_id)
         .send()?;
 
     let token = res
@@ -43,5 +43,16 @@ pub fn login(pref: Prefecture) -> Result<Token> {
         .get(offset..offset + len)
         .context("no partial")?;
 
-    todo!()
+    _ = req
+        .get(AUTH2_URL)
+        .header("X-Radiko-App", info.app_version.1)
+        .header("X-Radiko-App-Version", info.app_version.0)
+        .header("X-Radiko-Device", info.device)
+        .header("X-Radiko-User", info.user_id)
+        .header("X-Radiko-AuthToken", token)
+        .header("X-Radiko-PartialKey", partial)
+        .header("X-Radiko-Location", pref.gen_gps())
+        .send()?;
+
+    Ok(Token(token.to_str()?.into()))
 }
