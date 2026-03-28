@@ -4,6 +4,7 @@ use crate::{
     xml::{Radiko, Station, Station_, Stations},
 };
 use anyhow::{Context, Result};
+use chrono::{DateTime, Local};
 use reqwest::blocking::Client;
 use std::io;
 
@@ -146,7 +147,8 @@ pub fn choose_date(station: &Station) -> Result<()> {
         .station
         .progs
         .iter()
-        .for_each(|p| println!("{:?}", p.date));
+        .filter_map(|p| -> Option<DateTime<Local>> { (&p.date).try_into().ok() })
+        .for_each(|p| println!("{:?}", p));
 
     todo!()
 }

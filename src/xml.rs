@@ -1,3 +1,5 @@
+use anyhow::{Context, ensure};
+use chrono::prelude::*;
 use serde::Deserialize;
 
 #[derive(Debug, Deserialize)]
@@ -52,3 +54,25 @@ pub struct Prog {
 
 #[derive(Debug, Deserialize)]
 pub struct Date(String);
+
+impl TryFrom<&Date> for DateTime<Local> {
+    type Error = anyhow::Error;
+    fn try_from(value: &Date) -> Result<Self, Self::Error> {
+        let time = &value.0;
+        ensure!(time.len() == 8);
+
+        let year = time.get(0..4).context("no year")?.parse()?;
+        let month = time.get(4..6).context("no month")?.parse()?;
+        let day = time.get(6..8).context("no day")?.parse()?;
+        let time = Local
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(year, month, day)
+                    .context("invalid date")?
+                    .and_time(Local::now().naive_local().time()),
+            )
+            .single()
+            .context("no single time")?;
+
+        Ok(time)
+    }
+}
