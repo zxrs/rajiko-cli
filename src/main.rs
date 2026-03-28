@@ -5,8 +5,10 @@ mod util;
 
 use anyhow::Result;
 use login::login;
+use prefecture::choose_prefecture;
 
 fn main() -> Result<()> {
-    let token = login()?;
+    let prefecture = choose_prefecture()?;
+    let token = login(prefecture)?;
     Ok(())
 }

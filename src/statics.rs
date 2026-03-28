@@ -16,7 +16,7 @@ pub const VERSION_MAP: [Version; 13] = [
     VERSION_15_0_0,
 ];
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 pub struct Version {
     pub id: &'static str,
     pub sdk: u8,
