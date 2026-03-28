@@ -1,28 +1,4 @@
-use anyhow::{Context, Result};
-use std::{fmt::Display, io};
-
-pub fn choose_prefecture() -> Result<Prefecture> {
-    println!("Coose an area.");
-    AREA.iter()
-        .enumerate()
-        .for_each(|(i, area)| println!("{}: {}", i + 1, area));
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
-
-    let area = AREA.get(index - 1).context("no area")?;
-
-    println!("Choose an prefecture.");
-    area.pref()
-        .iter()
-        .enumerate()
-        .for_each(|(i, pref)| println!("{}: {}", i + 1, pref.name));
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
-
-    area.pref().get(index - 1).cloned().context("no prefecture")
-}
+use std::fmt::Display;
 
 pub enum Area {
     HokkaidoTohoku([Prefecture; 7]),
@@ -35,7 +11,7 @@ pub enum Area {
 }
 
 impl Area {
-    fn pref(&self) -> &[Prefecture] {
+    pub fn pref(&self) -> &[Prefecture] {
         use Area::*;
         match self {
             HokkaidoTohoku(v) => v,
@@ -64,7 +40,7 @@ impl Display for Area {
     }
 }
 
-const AREA: [Area; 7] = [
+pub const AREA: [Area; 7] = [
     Area::HokkaidoTohoku([HOKKAIDO, AOMORI, IWATE, MIYAGI, AKITA, YAMAGATA, FUKUSHIMA]),
     Area::Kanto([IBARAKI, TOCHIGI, GUNMA, SAITAMA, CHIBA, TOKYO, KANAGAWA]),
     Area::HokurikuKoshinetsu([NIIGATA, YAMANASHI, NAGANO, ISHIKAWA, TOYAMA, FUKUI]),
@@ -80,9 +56,9 @@ const AREA: [Area; 7] = [
 
 #[derive(Debug, Clone, Copy)]
 pub struct Prefecture {
-    id: &'static str,
-    name: &'static str,
-    location: (f32, f32),
+    pub id: &'static str,
+    pub name: &'static str,
+    pub location: (f32, f32),
 }
 
 impl Prefecture {
