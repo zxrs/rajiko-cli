@@ -1,10 +1,10 @@
 use crate::{
     prefecture::{AREA, Prefecture},
     statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
-    xml::{Radiko, Station, Station_, Stations},
+    xml::{Prog, Programs, Radiko, Station, Station_, Stations},
 };
 use anyhow::{Context, Result};
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Datelike, Local, Weekday};
 use reqwest::blocking::Client;
 use std::io;
 
@@ -55,7 +55,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
 
     let area = AREA.get(index - 1).context("no area")?;
 
-    println!("Choose an prefecture.");
+    println!("Choose a prefecture.");
     area.pref()
         .iter()
         .enumerate()
@@ -133,7 +133,7 @@ pub fn choose_station(pref: Prefecture) -> Result<Station> {
         .context("no station")
 }
 
-pub fn choose_date(station: &Station) -> Result<()> {
+pub fn choose_date(station: &Station) -> Result<Programs> {
     let res = reqwest::blocking::get(format!(
         "https://api.radiko.jp/program/v3/weekly/{}.xml",
         station.id
@@ -142,13 +142,47 @@ pub fn choose_date(station: &Station) -> Result<()> {
     let radiko: Radiko = serde_xml_rs::from_str(&xml)?;
     // dbg!(radiko);
 
-    radiko
+    println!("Choose a date.");
+    let programs: Vec<_> = radiko
         .stations
         .station
         .progs
-        .iter()
-        .filter_map(|p| -> Option<DateTime<Local>> { (&p.date).try_into().ok() })
-        .for_each(|p| println!("{:?}", p));
+        .into_iter()
+        .filter_map(|p| -> Option<(DateTime<Local>, Programs)> {
+            let date: DateTime<Local> = (&p.date).try_into().ok()?;
+            if date < Local::now() {
+                return Some((date, p));
+            }
+            None
+        })
+        .collect();
 
+    programs.iter().enumerate().for_each(|(i, p)| {
+        if p.0.weekday().eq(&Weekday::Sun) {
+            println!("\x1b[31m{}: {}\x1b[0m", i + 1, p.0.format("%Y-%m-%d (%A)"));
+        } else if p.0.weekday().eq(&Weekday::Sat) {
+            println!("\x1b[34m{}: {}\x1b[0m", i + 1, p.0.format("%Y-%m-%d (%A)"));
+        } else {
+            println!("{}: {}", i + 1, p.0.format("%Y-%m-%d (%A)"));
+        }
+    });
+
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+    let index = buf.trim().parse::<usize>()?;
+
+    programs
+        .get(index)
+        .map(|p| p.1.clone())
+        .context("no program")
+}
+
+pub fn choose_program(programs: &Programs) -> Result<Prog> {
+    println!("Choose a program");
+    programs
+        .prog
+        .iter()
+        .enumerate()
+        .for_each(|(i, p)| println!("{:2}: {}", i + 1, p.title));
     todo!()
 }
