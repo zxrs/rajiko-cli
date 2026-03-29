@@ -12,6 +12,7 @@ fn main() -> Result<()> {
     let station = choose_station(pref)?;
     let programs = choose_date(&station)?;
     let program = choose_program(&programs)?;
+    dbg!(program);
 
     Ok(())
 }

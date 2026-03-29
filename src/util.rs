@@ -48,7 +48,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
     println!("Coose an area.");
     AREA.iter()
         .enumerate()
-        .for_each(|(i, area)| println!("{}: {}", i + 1, area));
+        .for_each(|(i, area)| println!("{:2}: {}", i + 1, area));
     let mut buf = String::new();
     io::stdin().read_line(&mut buf)?;
     let index = buf.trim().parse::<usize>()?;
@@ -59,7 +59,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
     area.pref()
         .iter()
         .enumerate()
-        .for_each(|(i, pref)| println!("{}: {}", i + 1, pref.name));
+        .for_each(|(i, pref)| println!("{:2}: {}", i + 1, pref.name));
     let mut buf = String::new();
     io::stdin().read_line(&mut buf)?;
     let index = buf.trim().parse::<usize>()?;
@@ -121,7 +121,7 @@ pub fn choose_station(pref: Prefecture) -> Result<Station> {
     let stations: Stations = serde_xml_rs::from_str(&xml)?;
     println!("Choose a station.");
     stations.stations.iter().enumerate().for_each(|(i, s)| {
-        println!("{}: {}", i + 1, s.name);
+        println!("{:2}: {}", i + 1, s.name);
     });
     let mut buf = String::new();
     io::stdin().read_line(&mut buf)?;
@@ -159,11 +159,19 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
 
     programs.iter().enumerate().for_each(|(i, p)| {
         if p.0.weekday().eq(&Weekday::Sun) {
-            println!("\x1b[31m{}: {}\x1b[0m", i + 1, p.0.format("%Y-%m-%d (%A)"));
+            println!(
+                "\x1b[31m{:2}: {}\x1b[0m",
+                i + 1,
+                p.0.format("%Y-%m-%d (%A)")
+            );
         } else if p.0.weekday().eq(&Weekday::Sat) {
-            println!("\x1b[34m{}: {}\x1b[0m", i + 1, p.0.format("%Y-%m-%d (%A)"));
+            println!(
+                "\x1b[34m{:2}: {}\x1b[0m",
+                i + 1,
+                p.0.format("%Y-%m-%d (%A)")
+            );
         } else {
-            println!("{}: {}", i + 1, p.0.format("%Y-%m-%d (%A)"));
+            println!("{:2}: {}", i + 1, p.0.format("%Y-%m-%d (%A)"));
         }
     });
 
@@ -177,12 +185,50 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
         .context("no program")
 }
 
-pub fn choose_program(programs: &Programs) -> Result<Prog> {
-    println!("Choose a program");
+pub fn choose_program(programs: &Programs) -> Result<Vec<Prog>> {
+    println!("Choose a program. (eg: \"1 2 3\", \"10-12\")");
     programs
         .prog
         .iter()
         .enumerate()
-        .for_each(|(i, p)| println!("{:2}: {}", i + 1, p.title));
-    todo!()
+        .try_for_each(|(i, p)| -> Result<()> {
+            let ft: DateTime<Local> = (&p.ft).try_into()?;
+            let to: DateTime<Local> = (&p.to).try_into()?;
+            println!(
+                "{:2}: {} 〜 {} {}",
+                i + 1,
+                ft.format("%H:%M"),
+                to.format("%H:%M"),
+                p.title
+            );
+            Ok(())
+        })?;
+
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+
+    let buf = buf.trim();
+    let index: Vec<(usize, usize)> = buf
+        .split(" ")
+        .filter_map(|v| {
+            if v.contains("-") {
+                let mut s = v.split("-");
+                let start = s.next()?.parse::<usize>().ok()?;
+                let end = s.next()?.parse::<usize>().ok()?;
+                Some((start - 1, end - 1))
+            } else {
+                let start = v.parse::<usize>().ok()?;
+                let end = v.parse::<usize>().ok()?;
+                Some((start - 1, end - 1))
+            }
+        })
+        .collect();
+
+    let programs: Vec<_> = index
+        .into_iter()
+        .filter_map(|(start, end)| programs.prog.get(start..=end))
+        .flatten()
+        .cloned()
+        .collect();
+    Ok(programs)
 }
