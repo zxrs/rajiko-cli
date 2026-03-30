@@ -180,7 +180,7 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
     let index = buf.trim().parse::<usize>()?;
 
     programs
-        .get(index)
+        .get(index - 1)
         .map(|p| p.1.clone())
         .context("no program")
 }
