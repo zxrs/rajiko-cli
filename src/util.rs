@@ -1,10 +1,10 @@
 use crate::{
     prefecture::{AREA, Prefecture},
     statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
-    xml::{Prog, Programs, Radiko, Station, Station_, Stations},
+    xml::{Prog, Programs, Radiko, Station, Station_, Stations, Urls},
 };
 use anyhow::{Context, Result};
-use chrono::{DateTime, Datelike, Local, Weekday};
+use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
 use reqwest::blocking::Client;
 use std::io;
 
@@ -21,7 +21,14 @@ pub struct Info {
     pub device: String,
 }
 
-pub fn generate_randam_info() -> Info {
+fn generate_random_id() -> String {
+    let hex = b"0123456789abcdef";
+    (0..32)
+        .map(|_| hex[rand::random_range(0..hex.len())] as char)
+        .collect()
+}
+
+pub fn generate_random_info() -> Info {
     let version = VERSION_MAP[rand::random_range(0..VERSION_MAP.len())];
     let build = version.builds[rand::random_range(0..version.builds.len())];
     let model = MODEL_LIST[rand::random_range(0..MODEL_LIST.len())];
@@ -31,10 +38,7 @@ pub fn generate_randam_info() -> Info {
         version.id, model, build
     );
     let app_version = APP_VERSION_MAP[rand::random_range(0..APP_VERSION_MAP.len())];
-    let hex = b"0123456789abcdef";
-    let user_id = (0..32)
-        .map(|_| hex[rand::random_range(0..hex.len())] as char)
-        .collect();
+    let user_id = generate_random_id();
 
     Info {
         app_version,
@@ -67,9 +71,9 @@ pub fn choose_prefecture() -> Result<Prefecture> {
     area.pref().get(index - 1).cloned().context("no prefecture")
 }
 
-pub fn login(pref: Prefecture) -> Result<Token> {
-    let info = generate_randam_info();
-    // dbg!(&info);
+pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
+    let info = generate_random_info();
+    dbg!(&info);
 
     let req = Client::builder().cookie_store(true).build()?;
 
@@ -100,8 +104,9 @@ pub fn login(pref: Prefecture) -> Result<Token> {
     let partial = ASMARTPHONE8_FULLKEY_B64
         .get(offset..offset + len)
         .context("no partial")?;
+    dbg!(&token, offset, len, &partial);
 
-    _ = req
+    let res = req
         .get(AUTH2_URL)
         .header("X-Radiko-App", info.app_version.1)
         .header("X-Radiko-App-Version", info.app_version.0)
@@ -111,8 +116,9 @@ pub fn login(pref: Prefecture) -> Result<Token> {
         .header("X-Radiko-PartialKey", partial)
         .header("X-Radiko-Location", pref.gen_gps())
         .send()?;
+    dbg!(res);
 
-    Ok(Token(token.to_str()?.into()))
+    Ok((req, Token(token.to_str()?.into())))
 }
 
 pub fn choose_station(pref: Prefecture) -> Result<Station> {
@@ -231,4 +237,74 @@ pub fn choose_program(programs: &Programs) -> Result<Vec<Prog>> {
         .cloned()
         .collect();
     Ok(programs)
+}
+
+fn playlist_url(station: &Station) -> Result<String> {
+    let res = reqwest::blocking::get(format!(
+        "https://radiko.jp/v3/station/stream/pc_html5/{}.xml",
+        station.id
+    ))?;
+    let xml = res.text()?;
+    let urls: Urls = serde_xml_rs::from_str(&xml)?;
+    let playlist_url = urls
+        .url
+        .iter()
+        .filter(|url| url.areafree.eq("0") && url.timefree.eq("1"))
+        .map(|url| url.playlist_create_url.as_str())
+        // .inspect(|v| println!("{v}"))
+        .next()
+        .unwrap_or("https://tf-f-rpaa-radiko.smartstream.ne.jp/tf/playlist.m3u8");
+    Ok(playlist_url.into())
+}
+
+pub fn download(
+    // req: &Client,
+    pref: Prefecture,
+    token: &Token,
+    station: &Station,
+    program: &Vec<Prog>,
+) -> Result<()> {
+    let playlist_url = playlist_url(station)?;
+    dbg!(&playlist_url);
+
+    let lsid = generate_random_id();
+
+    const FIXED_SEEK: i64 = 300;
+
+    let req = Client::builder().cookie_store(true).build()?;
+
+    // let mut links = vec![];
+    for p in program {
+        let ft: DateTime<Local> = (&p.ft).try_into()?;
+        let to: DateTime<Local> = (&p.to).try_into()?;
+
+        let mut seek = ft.clone();
+
+        while seek < to {
+            let url = format!(
+                "{}?lsid={}&station_id={}&l={FIXED_SEEK}&start_at={}&end_at={}&type=b&ft={2}&to={3}&seek={}",
+                &playlist_url,
+                &lsid,
+                station.id,
+                &ft.format("%Y%m%d%H%M%S"),
+                &to.format("%Y%m%d%H%M%S"),
+                &seek.format("%Y%m%d%H%M%S"),
+            );
+            dbg!(&url);
+            let res = req
+                .get(&url)
+                .header("X-Radiko-AreaId", pref.id)
+                .header("X-Radiko-AuthToken", &token.0)
+                .send()?;
+            dbg!(&res);
+
+            let text = res.text()?;
+            dbg!(text);
+
+            seek = seek
+                .checked_add_signed(TimeDelta::seconds(FIXED_SEEK))
+                .context("date time is out out range")?;
+        }
+    }
+    todo!()
 }

@@ -105,3 +105,20 @@ impl TryFrom<&Time> for DateTime<Local> {
         Ok(time)
     }
 }
+
+#[derive(Debug, Deserialize)]
+pub struct Urls {
+    #[serde(rename = "url")]
+    pub url: Vec<Url>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Url {
+    #[serde(rename = "@areafree")]
+    pub areafree: String,
+    #[serde(rename = "@max_delay")]
+    pub max_delay: String,
+    #[serde(rename = "@timefree")]
+    pub timefree: String,
+    pub playlist_create_url: String,
+}
