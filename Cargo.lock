@@ -980,6 +980,7 @@ name = "rajiko-cli"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "base64",
  "chrono",
  "rand 0.10.0",
  "reqwest",

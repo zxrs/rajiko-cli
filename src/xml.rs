@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::{Context, ensure};
 use chrono::prelude::*;
 use serde::Deserialize;
@@ -104,4 +106,27 @@ impl TryFrom<&Time> for DateTime<Local> {
             .context("no single time")?;
         Ok(time)
     }
+}
+
+impl fmt::Display for &Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Urls {
+    #[serde(rename = "url")]
+    pub url: Vec<Url>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct Url {
+    #[serde(rename = "@areafree")]
+    pub areafree: String,
+    #[serde(rename = "@max_delay")]
+    pub max_delay: String,
+    #[serde(rename = "@timefree")]
+    pub timefree: String,
+    pub playlist_create_url: String,
 }
