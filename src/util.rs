@@ -7,7 +7,14 @@ use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose};
 use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
 use reqwest::blocking::Client;
-use std::io;
+use std::{
+    env,
+    fs::{self, File},
+    io::{self, Write},
+    path::PathBuf,
+    thread,
+    time::Duration,
+};
 
 const AUTH1_URL: &str = "https://radiko.jp/v2/api/auth1";
 const AUTH2_URL: &str = "https://radiko.jp/v2/api/auth2";
@@ -72,7 +79,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
     area.pref().get(index - 1).cloned().context("no prefecture")
 }
 
-pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
+pub fn login(pref: Prefecture) -> Result<Token> {
     let info = generate_random_info();
     // dbg!(&info);
 
@@ -121,10 +128,10 @@ pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
         .header("X-Radiko-PartialKey", partial)
         .header("X-Radiko-Location", pref.gen_gps())
         .send()?;
-    dbg!(&res);
+    // dbg!(&res);
     ensure!(res.status() == 200);
 
-    Ok((req, Token(token.to_str()?.into())))
+    Ok(Token(token.to_str()?.into()))
 }
 
 pub fn choose_station(pref: Prefecture) -> Result<Station> {
@@ -263,23 +270,26 @@ fn playlist_url(station: &Station) -> Result<String> {
     Ok(playlist_url.into())
 }
 
-pub fn download(
+pub fn part_links(
     // req: &Client,
     pref: Prefecture,
     token: &Token,
     station: &Station,
     program: &Vec<Prog>,
-) -> Result<()> {
+) -> Result<Vec<String>> {
     let playlist_url = playlist_url(station)?;
-    dbg!(&playlist_url);
+    // dbg!(&playlist_url);
 
     let lsid = generate_random_id();
 
     const FIXED_SEEK: i64 = 300;
 
-    let req = Client::builder().cookie_store(true).build()?;
+    let req = reqwest::blocking::Client::builder()
+        .cookie_store(true)
+        .build()?;
 
-    // let mut links = vec![];
+    let mut links = vec![];
+
     for p in program {
         let ft: DateTime<Local> = (&p.ft).try_into()?;
         let to: DateTime<Local> = (&p.to).try_into()?;
@@ -296,21 +306,79 @@ pub fn download(
                 &to.format("%Y%m%d%H%M%S"),
                 &seek.format("%Y%m%d%H%M%S"),
             );
-            dbg!(&url);
+            // dbg!(&url);
             let res = req
                 .get(&url)
                 .header("X-Radiko-AreaId", pref.id)
                 .header("X-Radiko-AuthToken", &token.0)
                 .send()?;
-            dbg!(&res);
+            // dbg!(&res);
 
             let text = res.text()?;
-            dbg!(text);
+            // dbg!(text);
+            let link = text
+                .lines()
+                .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+                .next()
+                .context("no link")?;
+
+            let res = req.get(link).send()?;
+            let text = res.text()?;
+
+            text.lines()
+                .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+                .for_each(|line| {
+                    links.push(line.into());
+                });
 
             seek = seek
                 .checked_add_signed(TimeDelta::seconds(FIXED_SEEK))
                 .context("date time is out out range")?;
         }
     }
-    todo!()
+    Ok(links)
+}
+
+fn parse_aac(data: &[u8]) -> (u32, u32) {
+    if !data.starts_with(b"id3") {
+        return (0, 0);
+    }
+    let id3_payload_size = u32::from_be_bytes(data[6..].try_into().unwrap());
+    let id3_tag_size = 10 + id3_payload_size;
+
+    let timestamp_low = u32::from_be_bytes(data[id3_tag_size as usize - 4..].try_into().unwrap());
+    let timestamp_high = u32::from_be_bytes(data[id3_tag_size as usize - 8..].try_into().unwrap());
+    let timestamp = timestamp_low + 0xffffffff * timestamp_high;
+    (id3_tag_size, timestamp)
+}
+
+pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<String>) -> Result<()> {
+    let file_name = format!(
+        "{}_{}-{}",
+        station.id,
+        &program.first().context("no first")?.ft,
+        &program.last().context("no last")?.to
+    );
+    let tmp_file_name = format!("{}.tmp", &file_name);
+    let aac_file_name = format!("{}.aac", &file_name);
+
+    let download_dir = PathBuf::from(env::var("HOME")?).join("Downloads");
+
+    let tmp_file_path = download_dir.join(&tmp_file_name);
+    let aac_file_path = download_dir.join(&aac_file_name);
+
+    let mut tmp_file = File::create(&tmp_file_path)?;
+
+    for link in part_links {
+        let res = reqwest::blocking::get(link)?;
+        // dbg!(&res);
+        let bytes = res.bytes()?;
+        let (offset, _) = parse_aac(&bytes);
+        tmp_file.write_all(&bytes.get(offset as usize..).context("no data")?)?;
+    }
+
+    thread::sleep(Duration::from_secs(1));
+    fs::rename(&tmp_file_path, &aac_file_path)?;
+
+    Ok(())
 }

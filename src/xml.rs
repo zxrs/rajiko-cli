@@ -1,3 +1,5 @@
+use std::fmt;
+
 use anyhow::{Context, ensure};
 use chrono::prelude::*;
 use serde::Deserialize;
@@ -103,6 +105,12 @@ impl TryFrom<&Time> for DateTime<Local> {
             .single()
             .context("no single time")?;
         Ok(time)
+    }
+}
+
+impl fmt::Display for &Time {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "{}", self.0)
     }
 }
 
