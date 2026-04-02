@@ -3,7 +3,8 @@ use crate::{
     statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
     xml::{Prog, Programs, Radiko, Station, Station_, Stations, Urls},
 };
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, ensure};
+use base64::{Engine, engine::general_purpose};
 use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
 use reqwest::blocking::Client;
 use std::io;
@@ -73,7 +74,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
 
 pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
     let info = generate_random_info();
-    dbg!(&info);
+    // dbg!(&info);
 
     let req = Client::builder().cookie_store(true).build()?;
 
@@ -84,6 +85,7 @@ pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
         .header("X-Radiko-Device", &info.device)
         .header("X-Radiko-User", &info.user_id)
         .send()?;
+    // dbg!(&res);
 
     let token = res
         .headers()
@@ -101,10 +103,13 @@ pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
         .context("no key length")?
         .to_str()?
         .parse::<usize>()?;
-    let partial = ASMARTPHONE8_FULLKEY_B64
-        .get(offset..offset + len)
-        .context("no partial")?;
-    dbg!(&token, offset, len, &partial);
+
+    let decoded = general_purpose::STANDARD_NO_PAD.decode(ASMARTPHONE8_FULLKEY_B64)?;
+    // dbg!(decoded.len());
+
+    let partial = general_purpose::STANDARD
+        .encode(decoded.get(offset..offset + len).context("invalid range")?);
+    // dbg!(&token, offset, len, &partial);
 
     let res = req
         .get(AUTH2_URL)
@@ -116,7 +121,8 @@ pub fn login(pref: Prefecture) -> Result<(Client, Token)> {
         .header("X-Radiko-PartialKey", partial)
         .header("X-Radiko-Location", pref.gen_gps())
         .send()?;
-    dbg!(res);
+    dbg!(&res);
+    ensure!(res.status() == 200);
 
     Ok((req, Token(token.to_str()?.into())))
 }
