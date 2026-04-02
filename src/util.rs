@@ -6,6 +6,7 @@ use crate::{
 use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose};
 use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
+use indicatif::{ProgressBar, ProgressStyle};
 use reqwest::blocking::Client;
 use std::{
     env,
@@ -369,16 +370,28 @@ pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<Stri
 
     let mut tmp_file = File::create(&tmp_file_path)?;
 
+    let bar = ProgressBar::new(part_links.len() as u64);
+    bar.set_style(
+        ProgressStyle::default_bar()
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")?,
+    );
+    bar.set_message("Downloading...");
+
     for link in part_links {
         let res = reqwest::blocking::get(link)?;
         // dbg!(&res);
         let bytes = res.bytes()?;
         let (offset, _) = parse_aac(&bytes);
         tmp_file.write_all(&bytes.get(offset as usize..).context("no data")?)?;
+        bar.inc(1);
     }
+
+    bar.finish_with_message("Done!");
 
     thread::sleep(Duration::from_secs(1));
     fs::rename(&tmp_file_path, &aac_file_path)?;
+
+    println!("Saved!: \"{}\"", aac_file_path.to_string_lossy());
 
     Ok(())
 }
