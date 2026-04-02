@@ -1,7 +1,7 @@
 use crate::{
     prefecture::{AREA, Prefecture},
     statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
-    xml::{Prog, Programs, Radiko, Station, Station_, Stations, Urls},
+    xml::{Prog, Programs, Radiko, Station, Stations, Urls},
 };
 use anyhow::{Context, Result, ensure};
 use base64::{Engine, engine::general_purpose};
@@ -26,6 +26,7 @@ pub struct Token(String);
 pub struct Info {
     pub app_version: (&'static str, &'static str),
     pub user_id: String,
+    #[allow(unused)]
     pub user_agent: String,
     pub device: String,
 }

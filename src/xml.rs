@@ -14,7 +14,9 @@ pub struct Stations {
 pub struct Station {
     pub id: String,
     pub name: String,
+    #[allow(unused)]
     pub areafree: u8,
+    #[allow(unused)]
     pub timefree: u8,
 }
 
@@ -32,8 +34,10 @@ pub struct Stations_ {
 
 #[derive(Debug, Deserialize)]
 pub struct Station_ {
+    #[allow(unused)]
     #[serde(rename = "@id")]
     pub id: String,
+    #[allow(unused)]
     pub name: String,
     pub progs: Vec<Programs>,
 }
@@ -124,6 +128,7 @@ pub struct Urls {
 pub struct Url {
     #[serde(rename = "@areafree")]
     pub areafree: String,
+    #[allow(unused)]
     #[serde(rename = "@max_delay")]
     pub max_delay: String,
     #[serde(rename = "@timefree")]
