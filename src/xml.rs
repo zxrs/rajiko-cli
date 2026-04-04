@@ -1,8 +1,7 @@
-use std::fmt;
-
 use anyhow::{Context, ensure};
 use chrono::prelude::*;
 use serde::Deserialize;
+use std::{fmt, ops::Deref};
 
 #[derive(Debug, Deserialize)]
 pub struct Stations {
@@ -44,32 +43,44 @@ pub struct Station_ {
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Programs {
-    pub date: Date,
-    // #[serde(rename = "prog")]
-    pub prog: Vec<Prog>,
+    date: Date,
+    prog: Vec<Prog>,
 }
 
-#[derive(Debug, Deserialize, Clone)]
-pub struct Prog {
-    #[serde(rename = "@ft")]
-    pub ft: Time,
-    #[serde(rename = "@to")]
-    pub to: Time,
-    pub title: String,
+impl Programs {
+    pub fn date(&self) -> &Date {
+        &self.date
+    }
+
+    pub fn prog(&self) -> &[Prog] {
+        self.prog.as_slice()
+    }
 }
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct Date(String);
 
+impl Date {
+    pub fn to_datetime(&self) -> Result<DateTime<Local>, anyhow::Error> {
+        self.try_into()
+    }
+}
+
+impl Deref for Date {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
 impl TryFrom<&Date> for DateTime<Local> {
     type Error = anyhow::Error;
-    fn try_from(value: &Date) -> Result<Self, Self::Error> {
-        let time = &value.0;
-        ensure!(time.len() == 8);
+    fn try_from(date: &Date) -> Result<Self, Self::Error> {
+        ensure!(date.len() == 8);
 
-        let year = time.get(0..4).context("no year")?.parse()?;
-        let month = time.get(4..6).context("no month")?.parse()?;
-        let day = time.get(6..8).context("no day")?.parse()?;
+        let year = date.get(0..4).context("no year")?.parse()?;
+        let month = date.get(4..6).context("no month")?.parse()?;
+        let day = date.get(6..8).context("no day")?.parse()?;
         let time = Local
             .from_local_datetime(
                 &NaiveDate::from_ymd_opt(year, month, day)
@@ -84,12 +95,47 @@ impl TryFrom<&Date> for DateTime<Local> {
 }
 
 #[derive(Debug, Deserialize, Clone)]
+pub struct Prog {
+    #[serde(rename = "@ft")]
+    ft: Time,
+    #[serde(rename = "@to")]
+    to: Time,
+    title: String,
+}
+
+impl Prog {
+    pub fn ft(&self) -> &Time {
+        &self.ft
+    }
+
+    pub fn to(&self) -> &Time {
+        &self.to
+    }
+
+    pub fn title(&self) -> &str {
+        &self.title
+    }
+}
+
+#[derive(Debug, Deserialize, Clone)]
 pub struct Time(String);
+
+impl Time {
+    pub fn to_datetime(&self) -> Result<DateTime<Local>, anyhow::Error> {
+        self.try_into()
+    }
+}
+
+impl Deref for Time {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
 
 impl TryFrom<&Time> for DateTime<Local> {
     type Error = anyhow::Error;
-    fn try_from(value: &Time) -> Result<Self, Self::Error> {
-        let time = &value.0;
+    fn try_from(time: &Time) -> Result<Self, Self::Error> {
         ensure!(time.len() == 14);
 
         let year = time.get(0..4).context("no year")?.parse()?;
