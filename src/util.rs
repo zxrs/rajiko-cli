@@ -369,7 +369,7 @@ pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<Stri
     let bar = ProgressBar::new(part_links.len() as u64);
     bar.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")?,
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>4}/{len:4} {msg}")?,
     );
     bar.set_message("Downloading...");
 
