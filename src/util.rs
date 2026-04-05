@@ -351,7 +351,7 @@ fn parse_aac(data: &[u8]) -> Result<(u32, u32)> {
 
 pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<String>) -> Result<()> {
     let file_name = format!(
-        "{}_{}-{}",
+        "{}_{}_{}",
         station.id,
         program.first().context("no first")?.ft(),
         program.last().context("no last")?.to()
