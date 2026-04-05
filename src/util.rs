@@ -24,7 +24,8 @@ pub struct Token(String);
 
 #[derive(Debug)]
 pub struct Info {
-    pub app_version: (&'static str, &'static str),
+    pub app: &'static str,
+    pub app_version: &'static str,
     pub user_id: String,
     #[allow(unused)]
     pub user_agent: String,
@@ -47,10 +48,11 @@ pub fn generate_random_info() -> Info {
         "Dalvik/2.1.0 (Linux; U; Android {}; {}/{})",
         version.id, model, build
     );
-    let app_version = APP_VERSION_MAP[rand::random_range(0..APP_VERSION_MAP.len())];
+    let (app_version, app) = APP_VERSION_MAP[rand::random_range(0..APP_VERSION_MAP.len())];
     let user_id = generate_random_id();
 
     Info {
+        app,
         app_version,
         user_id,
         user_agent,
@@ -58,14 +60,18 @@ pub fn generate_random_info() -> Info {
     }
 }
 
+fn read_line() -> Result<String> {
+    let mut buf = String::new();
+    io::stdin().read_line(&mut buf)?;
+    Ok(buf.trim().into())
+}
+
 pub fn choose_prefecture() -> Result<Prefecture> {
     println!("Coose an area.");
     AREA.iter()
         .enumerate()
         .for_each(|(i, area)| println!("{:2}: {}", i + 1, area));
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
+    let index = read_line()?.parse::<usize>()?;
 
     let area = AREA.get(index - 1).context("no area")?;
 
@@ -74,9 +80,7 @@ pub fn choose_prefecture() -> Result<Prefecture> {
         .iter()
         .enumerate()
         .for_each(|(i, pref)| println!("{:2}: {}", i + 1, pref.name));
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
+    let index = read_line()?.parse::<usize>()?;
 
     area.pref().get(index - 1).cloned().context("no prefecture")
 }
@@ -89,8 +93,8 @@ pub fn login(pref: Prefecture) -> Result<Token> {
 
     let res = req
         .get(AUTH1_URL)
-        .header("X-Radiko-App", info.app_version.1)
-        .header("X-Radiko-App-Version", info.app_version.0)
+        .header("X-Radiko-App", info.app)
+        .header("X-Radiko-App-Version", info.app_version)
         .header("X-Radiko-Device", &info.device)
         .header("X-Radiko-User", &info.user_id)
         .send()?;
@@ -114,16 +118,14 @@ pub fn login(pref: Prefecture) -> Result<Token> {
         .parse::<usize>()?;
 
     let decoded = general_purpose::STANDARD_NO_PAD.decode(ASMARTPHONE8_FULLKEY_B64)?;
-    // dbg!(decoded.len());
-
     let partial = general_purpose::STANDARD
         .encode(decoded.get(offset..offset + len).context("invalid range")?);
     // dbg!(&token, offset, len, &partial);
 
     let res = req
         .get(AUTH2_URL)
-        .header("X-Radiko-App", info.app_version.1)
-        .header("X-Radiko-App-Version", info.app_version.0)
+        .header("X-Radiko-App", info.app)
+        .header("X-Radiko-App-Version", info.app_version)
         .header("X-Radiko-Device", info.device)
         .header("X-Radiko-User", info.user_id)
         .header("X-Radiko-AuthToken", token)
@@ -144,9 +146,7 @@ pub fn choose_station(pref: Prefecture) -> Result<Station> {
     stations.stations.iter().enumerate().for_each(|(i, s)| {
         println!("{:2}: {}", i + 1, s.name);
     });
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
+    let index = read_line()?.parse::<usize>()?;
     stations
         .stations
         .get(index - 1)
@@ -170,7 +170,7 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
         .progs
         .into_iter()
         .filter_map(|p| -> Option<(DateTime<Local>, Programs)> {
-            let date: DateTime<Local> = (&p.date).try_into().ok()?;
+            let date = p.date().to_datetime().ok()?;
             if date < Local::now() {
                 return Some((date, p));
             }
@@ -196,9 +196,7 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
         }
     });
 
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-    let index = buf.trim().parse::<usize>()?;
+    let index = read_line()?.parse::<usize>()?;
 
     programs
         .get(index - 1)
@@ -209,26 +207,23 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
 pub fn choose_program(programs: &Programs) -> Result<Vec<Prog>> {
     println!("Choose a program. (eg: \"1 2 3\", \"10-12\")");
     programs
-        .prog
+        .prog()
         .iter()
         .enumerate()
         .try_for_each(|(i, p)| -> Result<()> {
-            let ft: DateTime<Local> = (&p.ft).try_into()?;
-            let to: DateTime<Local> = (&p.to).try_into()?;
+            let ft = p.ft().to_datetime()?;
+            let to = p.to().to_datetime()?;
             println!(
                 "{:2}: {} 〜 {} {}",
                 i + 1,
                 ft.format("%H:%M"),
                 to.format("%H:%M"),
-                p.title
+                p.title()
             );
             Ok(())
         })?;
 
-    let mut buf = String::new();
-    io::stdin().read_line(&mut buf)?;
-
-    let buf = buf.trim();
+    let buf = read_line()?;
     let index: Vec<(usize, usize)> = buf
         .split(" ")
         .filter_map(|v| {
@@ -247,7 +242,7 @@ pub fn choose_program(programs: &Programs) -> Result<Vec<Prog>> {
 
     let programs: Vec<_> = index
         .into_iter()
-        .filter_map(|(start, end)| programs.prog.get(start..=end))
+        .filter_map(|(start, end)| programs.prog().get(start..=end))
         .flatten()
         .cloned()
         .collect();
@@ -293,8 +288,8 @@ pub fn part_links(
     let mut links = vec![];
 
     for p in program {
-        let ft: DateTime<Local> = (&p.ft).try_into()?;
-        let to: DateTime<Local> = (&p.to).try_into()?;
+        let ft = p.ft().to_datetime()?;
+        let to = p.to().to_datetime()?;
 
         let mut seek = ft.clone();
 
@@ -304,9 +299,9 @@ pub fn part_links(
                 &playlist_url,
                 &lsid,
                 station.id,
-                &ft.format("%Y%m%d%H%M%S"),
-                &to.format("%Y%m%d%H%M%S"),
-                &seek.format("%Y%m%d%H%M%S"),
+                p.ft(),
+                p.to(),
+                seek.format("%Y%m%d%H%M%S"),
             );
             // dbg!(&url);
             let res = req
@@ -341,25 +336,25 @@ pub fn part_links(
     Ok(links)
 }
 
-fn parse_aac(data: &[u8]) -> (u32, u32) {
+fn parse_aac(data: &[u8]) -> Result<(u32, u32)> {
     if !data.starts_with(b"id3") {
-        return (0, 0);
+        return Ok((0, 0));
     }
-    let id3_payload_size = u32::from_be_bytes(data[6..].try_into().unwrap());
+    let id3_payload_size = u32::from_be_bytes(data[6..].try_into()?);
     let id3_tag_size = 10 + id3_payload_size;
 
-    let timestamp_low = u32::from_be_bytes(data[id3_tag_size as usize - 4..].try_into().unwrap());
-    let timestamp_high = u32::from_be_bytes(data[id3_tag_size as usize - 8..].try_into().unwrap());
+    let timestamp_low = u32::from_be_bytes(data[id3_tag_size as usize - 4..].try_into()?);
+    let timestamp_high = u32::from_be_bytes(data[id3_tag_size as usize - 8..].try_into()?);
     let timestamp = timestamp_low + 0xffffffff * timestamp_high;
-    (id3_tag_size, timestamp)
+    Ok((id3_tag_size, timestamp))
 }
 
 pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<String>) -> Result<()> {
     let file_name = format!(
-        "{}_{}-{}",
+        "{}_{}_{}",
         station.id,
-        &program.first().context("no first")?.ft,
-        &program.last().context("no last")?.to
+        program.first().context("no first")?.ft(),
+        program.last().context("no last")?.to()
     );
     let tmp_file_name = format!("{}.tmp", &file_name);
     let aac_file_name = format!("{}.aac", &file_name);
@@ -374,7 +369,7 @@ pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<Stri
     let bar = ProgressBar::new(part_links.len() as u64);
     bar.set_style(
         ProgressStyle::default_bar()
-            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>7}/{len:7} {msg}")?,
+            .template("[{elapsed_precise}] {bar:40.cyan/blue} {pos:>4}/{len:4} {msg}")?,
     );
     bar.set_message("Downloading...");
 
@@ -382,7 +377,7 @@ pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<Stri
         let res = reqwest::blocking::get(link)?;
         // dbg!(&res);
         let bytes = res.bytes()?;
-        let (offset, _) = parse_aac(&bytes);
+        let (offset, _) = parse_aac(&bytes)?;
         tmp_file.write_all(&bytes.get(offset as usize..).context("no data")?)?;
         bar.inc(1);
     }
