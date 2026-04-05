@@ -299,8 +299,8 @@ pub fn part_links(
                 &playlist_url,
                 &lsid,
                 station.id,
-                ft.format("%Y%m%d%H%M%S"),
-                to.format("%Y%m%d%H%M%S"),
+                p.ft(),
+                p.to(),
                 seek.format("%Y%m%d%H%M%S"),
             );
             // dbg!(&url);
