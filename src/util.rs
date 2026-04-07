@@ -403,5 +403,10 @@ pub fn real_time() -> Result<bool> {
 }
 
 pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
+    let res = reqwest::blocking::get(format!(
+        "https://api.radiko.jp/program/v3/now/{}.xml",
+        pref.id
+    ))?;
+    dbg!(res);
     todo!()
 }
