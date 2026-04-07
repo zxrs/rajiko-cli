@@ -391,3 +391,17 @@ pub fn download_aac(station: &Station, program: &Vec<Prog>, part_links: Vec<Stri
 
     Ok(())
 }
+
+pub fn real_time() -> Result<bool> {
+    println!("1. Real time?");
+    println!("2. Time shift?");
+    let index = read_line()?.parse::<u8>()?;
+    if index == 1 {
+        return Ok(true);
+    }
+    Ok(false)
+}
+
+pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
+    todo!()
+}
