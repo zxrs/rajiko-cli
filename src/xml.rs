@@ -28,7 +28,7 @@ pub struct Radiko {
 
 #[derive(Debug, Deserialize)]
 pub struct Stations_ {
-    pub station: Station_,
+    pub station: Vec<Station_>,
 }
 
 #[derive(Debug, Deserialize)]

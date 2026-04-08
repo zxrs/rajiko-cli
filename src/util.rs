@@ -167,12 +167,14 @@ pub fn choose_date(station: &Station) -> Result<Programs> {
     let programs: Vec<_> = radiko
         .stations
         .station
+        .first()
+        .context("no program")?
         .progs
-        .into_iter()
+        .iter()
         .filter_map(|p| -> Option<(DateTime<Local>, Programs)> {
             let date = p.date().to_datetime().ok()?;
             if date < Local::now() {
-                return Some((date, p));
+                return Some((date, p.clone()));
             }
             None
         })
@@ -407,6 +409,8 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
         "https://api.radiko.jp/program/v3/now/{}.xml",
         pref.id
     ))?;
-    dbg!(res);
+    let xml = res.text()?;
+    let radiko: Radiko = serde_xml_rs::from_str(&xml)?;
+    dbg!(radiko);
     todo!()
 }
