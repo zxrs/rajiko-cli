@@ -411,6 +411,27 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
     ))?;
     let xml = res.text()?;
     let radiko: Radiko = serde_xml_rs::from_str(&xml)?;
-    dbg!(radiko);
+    radiko
+        .stations
+        .station
+        .iter()
+        .enumerate()
+        .try_for_each(|(i, s)| -> Result<_> {
+            println!("{:2}. {}", i, &s.name);
+            let prog = s
+                .progs
+                .first()
+                .context("no program")?
+                .prog()
+                .first()
+                .context("no prog")?;
+            println!(
+                "\t{} ~ {} {}",
+                prog.ft().to_datetime()?.format("%H:%M"),
+                prog.to().to_datetime()?.format("%H:%M"),
+                prog.title()
+            );
+            Ok(())
+        })?;
     todo!()
 }
