@@ -13,7 +13,7 @@ fn main() -> Result<()> {
     let pref = choose_prefecture()?;
     let token = login(pref)?;
     if real_time()? {
-        choose_realtime_program(pref)?;
+        let programs = choose_realtime_program(pref)?;
         return Ok(());
     }
     let station = choose_station(pref)?;

@@ -404,7 +404,8 @@ pub fn real_time() -> Result<bool> {
     Ok(false)
 }
 
-pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
+pub fn choose_realtime_program(pref: Prefecture) -> Result<Vec<Prog>> {
+    println!("Choose a station.");
     let res = reqwest::blocking::get(format!(
         "https://api.radiko.jp/program/v3/now/{}.xml",
         pref.id
@@ -417,7 +418,7 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
         .iter()
         .enumerate()
         .try_for_each(|(i, s)| -> Result<_> {
-            println!("{:2}. {}", i, &s.name);
+            println!("{:2}. {}", i + 1, &s.name);
             let prog = s
                 .progs
                 .first()
@@ -433,5 +434,15 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<()> {
             );
             Ok(())
         })?;
-    todo!()
+
+    let index = read_line()?.parse::<usize>()?;
+    let programs = radiko
+        .stations
+        .station
+        .get(index - 1)
+        .context("no station.")?
+        .progs
+        .clone();
+
+    Ok(programs)
 }

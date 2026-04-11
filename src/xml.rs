@@ -31,7 +31,7 @@ pub struct Stations_ {
     pub station: Vec<Station_>,
 }
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Clone, Deserialize)]
 pub struct Station_ {
     #[allow(unused)]
     #[serde(rename = "@id")]
