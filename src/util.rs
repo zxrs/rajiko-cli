@@ -1,9 +1,9 @@
 use crate::{
     prefecture::{AREA, Prefecture},
     statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
-    xml::{Prog, Programs, Radiko, Station, Stations, Urls},
+    xml::{Prog, Programs, Radiko, Station, Station_, Stations, Urls},
 };
-use anyhow::{Context, Result, ensure};
+use anyhow::{Context, Result, anyhow, ensure};
 use base64::{Engine, engine::general_purpose};
 use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -404,7 +404,7 @@ pub fn real_time() -> Result<bool> {
     Ok(false)
 }
 
-pub fn choose_realtime_program(pref: Prefecture) -> Result<Vec<Prog>> {
+pub fn choose_realtime_program(pref: Prefecture) -> Result<(Station_, Vec<Prog>)> {
     println!("Choose a station.");
     let res = reqwest::blocking::get(format!(
         "https://api.radiko.jp/program/v3/now/{}.xml",
@@ -436,13 +436,67 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<Vec<Prog>> {
         })?;
 
     let index = read_line()?.parse::<usize>()?;
-    let programs = radiko
+    let station = radiko
         .stations
         .station
         .get(index - 1)
         .context("no station.")?
-        .progs
         .clone();
 
-    Ok(programs)
+    let programs = station
+        .progs
+        .first()
+        .context("no program.")?
+        .prog()
+        .to_vec();
+
+    Ok((station, programs))
+}
+
+pub fn realtime_parts_link(
+    pref: Prefecture,
+    token: &Token,
+    station_id: &str,
+    // program: &[Prog],
+) -> Result<String> {
+    // "url": "https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=90b93ad1dbd51e1f8655a07f794b12ea&type=b",
+    let lsid = generate_random_id();
+    let req = Client::builder().cookie_store(true).build()?;
+
+    loop {
+        let res = req.get(format!(
+        "https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id={}&l=15&lsid={}&type=b",
+        station_id,
+        &lsid
+    ))
+    .header("X-Radiko-AreaId", pref.id)
+        .header("X-Radiko-AuthToken", &token.0)
+    .send()?;
+
+        let text = res.text()?;
+
+        let url = text
+            .lines()
+            .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+            .next()
+            .context("no url.")?;
+
+        let res = reqwest::blocking::get(url)?;
+        let text = res.text()?;
+
+        let urls = text
+            .lines()
+            .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+            .collect::<Vec<_>>();
+
+        dbg!(urls);
+
+        thread::sleep(Duration::from_secs(5));
+
+        if lsid.is_empty() {
+            return Ok(url.into());
+        }
+    }
+
+    Err(anyhow!(""))
 }

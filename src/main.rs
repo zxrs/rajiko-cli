@@ -9,11 +9,15 @@ use util::{
     download_aac, login, part_links, real_time,
 };
 
+use crate::util::realtime_parts_link;
+
 fn main() -> Result<()> {
     let pref = choose_prefecture()?;
     let token = login(pref)?;
     if real_time()? {
-        let programs = choose_realtime_program(pref)?;
+        let (station, programs) = choose_realtime_program(pref)?;
+        let parts_link = realtime_parts_link(pref, &token, &station.id)?;
+
         return Ok(());
     }
     let station = choose_station(pref)?;
