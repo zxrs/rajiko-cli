@@ -16,7 +16,7 @@ fn main() -> Result<()> {
     let token = login(pref)?;
     if real_time()? {
         let (station, programs) = choose_realtime_program(pref)?;
-        let parts_link = realtime_parts_link(pref, &token, &station.id)?;
+        let parts_link = realtime_parts_link(pref, token, &station.id)?;
 
         return Ok(());
     }

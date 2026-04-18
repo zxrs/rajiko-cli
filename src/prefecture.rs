@@ -1,3 +1,5 @@
+#![allow(clippy::excessive_precision)]
+
 use std::fmt::Display;
 
 pub enum Area {

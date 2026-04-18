@@ -5,14 +5,24 @@ use crate::{
 };
 use anyhow::{Context, Result, anyhow, ensure};
 use base64::{Engine, engine::general_purpose};
-use chrono::{DateTime, Datelike, Local, TimeDelta, Weekday};
+use chrono::{DateTime, Datelike, Local, NaiveDate, TimeDelta, TimeZone, Weekday};
+use fdk_aac::dec::{Decoder, Transport};
 use indicatif::{ProgressBar, ProgressStyle};
+use libpulse_binding::{
+    sample::{Format, Spec},
+    stream::Direction,
+};
+use libpulse_simple_binding::Simple;
 use reqwest::blocking::Client;
 use std::{
+    collections::VecDeque,
     env,
     fs::{self, File},
-    io::{self, Write},
+    io::{self, Cursor, Write},
+    ops::Deref,
     path::PathBuf,
+    slice,
+    sync::{Arc, Mutex, mpsc},
     thread,
     time::Duration,
 };
@@ -20,6 +30,7 @@ use std::{
 const AUTH1_URL: &str = "https://radiko.jp/v2/api/auth1";
 const AUTH2_URL: &str = "https://radiko.jp/v2/api/auth2";
 
+#[derive(Debug, Clone)]
 pub struct Token(String);
 
 #[derive(Debug)]
@@ -453,50 +464,182 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<(Station_, Vec<Prog>)
     Ok((station, programs))
 }
 
+#[derive(Debug)]
+struct Pcm {
+    link: Link,
+    data: Vec<u8>,
+}
+
+#[derive(Debug)]
+struct Link(String);
+
+impl Link {
+    fn to_datetime(&self) -> Result<DateTime<Local>, anyhow::Error> {
+        self.try_into()
+    }
+}
+
+impl Deref for Link {
+    type Target = str;
+    fn deref(&self) -> &Self::Target {
+        &self.0
+    }
+}
+
+impl TryFrom<&Link> for DateTime<Local> {
+    type Error = anyhow::Error;
+    fn try_from(value: &Link) -> Result<Self, Self::Error> {
+        let s = value.0.split("/").last().context("no link")?;
+        ensure!(s.len() == 25 && s.ends_with(".aac"));
+
+        let year = s.get(0..4).context("no year")?.parse()?;
+        let month = s.get(4..6).context("no month")?.parse()?;
+        let day = s.get(6..8).context("no day")?.parse()?;
+
+        let hour = s.get(9..11).context("no hour")?.parse()?;
+        let min = s.get(11..13).context("no min")?.parse()?;
+        let sec = s.get(13..15).context("no sec")?.parse()?;
+
+        let time = Local
+            .from_local_datetime(
+                &NaiveDate::from_ymd_opt(year, month, day)
+                    .context("invalid date")?
+                    .and_hms_opt(hour, min, sec)
+                    .context("invalid time")?,
+            )
+            .single()
+            .context("no single time")?;
+        Ok(time)
+    }
+}
+
+fn decode(
+    queue: Arc<Mutex<VecDeque<Pcm>>>,
+    req: Client,
+    pref: Prefecture,
+    station_id: String,
+    lsid: String,
+    token: Token,
+) -> Result<()> {
+    let url = format!(
+        "https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id={}&l=15&lsid={}&type=b",
+        station_id, &lsid
+    );
+    let res = req
+        .get(&url)
+        .header("X-Radiko-AreaId", pref.id)
+        .header("X-Radiko-AuthToken", &token.0)
+        .send()?;
+    let text = res.text()?;
+    let url = text
+        .lines()
+        .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+        .next()
+        .context("no url")?;
+    // dbg!(url);
+    let res = req.get(url).send()?;
+    let text = res.text()?;
+    let links = text
+        .lines()
+        .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
+        .filter(|link|
+            // let l = Link(link.to_string()).to_datetime().ok()?;
+            // if queue
+            //     .lock()
+            //     .unwrap()
+            //     .iter()
+            //     .filter_map(|p| p.link.to_datetime().ok())
+            //     .all(|q| l > q)
+            queue.lock().unwrap().iter().all(|p| p.link.ne(*link)))
+        .collect::<Vec<_>>();
+
+    // dbg!(&links);
+
+    let mut handles = vec![];
+    for link in links {
+        let link = link.to_string();
+        let handle = thread::spawn(move || -> Result<Pcm> {
+            let res = reqwest::blocking::get(&link)?;
+            let bytes = res.bytes()?;
+
+            let mut decoder = Decoder::new(Transport::Adts);
+            decoder.fill(&bytes).map_err(|e| anyhow!(e))?;
+            let mut data = Cursor::new(vec![]);
+
+            let mut buf = [0; 4 * 1024];
+            loop {
+                if let Err(_) = decoder.decode_frame(&mut buf) {
+                    break;
+                }
+                let size = decoder.decoded_frame_size();
+                let s = unsafe { slice::from_raw_parts(buf.as_ptr() as *const u8, size * 2) };
+                data.write_all(s)?;
+            }
+
+            Ok(Pcm {
+                link: Link(link),
+                data: data.into_inner(),
+            })
+        });
+        handles.push(handle);
+    }
+
+    for handle in handles {
+        let pcm = handle.join().unwrap()?;
+        queue.lock().unwrap().push_back(pcm);
+    }
+
+    Ok(())
+}
+
 pub fn realtime_parts_link(
     pref: Prefecture,
-    token: &Token,
+    token: Token,
     station_id: &str,
     // program: &[Prog],
-) -> Result<String> {
-    // "url": "https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id=TBS&l=15&lsid=90b93ad1dbd51e1f8655a07f794b12ea&type=b",
+) -> Result<()> {
     let lsid = generate_random_id();
     let req = Client::builder().cookie_store(true).build()?;
 
+    let queue = Arc::new(Mutex::new(VecDeque::<Pcm>::new()));
+
+    let spec = Spec {
+        format: Format::S16le,
+        channels: 2,
+        rate: 48000,
+    };
+    ensure!(spec.is_valid());
+
+    let ps = Simple::new(
+        None,
+        "rajiko-cli",
+        Direction::Playback,
+        None,
+        "play",
+        &spec,
+        None,
+        None,
+    )?;
+
     loop {
-        let res = req.get(format!(
-        "https://si-f-radiko.smartstream.ne.jp/so/playlist.m3u8?station_id={}&l=15&lsid={}&type=b",
-        station_id,
-        &lsid
-    ))
-    .header("X-Radiko-AreaId", pref.id)
-        .header("X-Radiko-AuthToken", &token.0)
-    .send()?;
+        let q = Arc::clone(&queue);
+        let req = req.clone();
+        let station_id = station_id.to_string();
+        let lsid = lsid.clone();
+        let token = token.clone();
+        thread::spawn(move || decode(q, req, pref, station_id, lsid, token));
 
-        let text = res.text()?;
-
-        let url = text
-            .lines()
-            .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
-            .next()
-            .context("no url.")?;
-
-        let res = reqwest::blocking::get(url)?;
-        let text = res.text()?;
-
-        let urls = text
-            .lines()
-            .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
-            .collect::<Vec<_>>();
-
-        dbg!(urls);
-
-        thread::sleep(Duration::from_secs(5));
-
-        if lsid.is_empty() {
-            return Ok(url.into());
+        let mut q = queue.lock().unwrap();
+        let v = q.iter().map(|q| &q.link).collect::<Vec<_>>();
+        dbg!(v);
+        if let Some(ref mut p) = q.pop_front() {
+            ps.write(&p.data)?;
+            // ps.drain()?;
+        } else {
+            thread::sleep(Duration::from_secs(1));
         }
     }
 
-    Err(anyhow!(""))
+    #[allow(unreachable_code)]
+    Ok(())
 }
