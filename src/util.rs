@@ -22,7 +22,7 @@ use std::{
     ops::Deref,
     path::PathBuf,
     slice,
-    sync::{Arc, Mutex, mpsc},
+    sync::{Arc, Mutex, RwLock, mpsc},
     thread,
     time::Duration,
 };
@@ -466,27 +466,27 @@ pub fn choose_realtime_program(pref: Prefecture) -> Result<(Station_, Vec<Prog>)
 
 #[derive(Debug)]
 struct Pcm {
-    link: Link,
+    datetime: DateTime<Local>,
     data: Vec<u8>,
 }
 
 #[derive(Debug)]
-struct Link(String);
+struct Link<'a>(&'a str);
 
-impl Link {
+impl<'a> Link<'a> {
     fn to_datetime(&self) -> Result<DateTime<Local>, anyhow::Error> {
         self.try_into()
     }
 }
 
-impl Deref for Link {
+impl<'a> Deref for Link<'a> {
     type Target = str;
     fn deref(&self) -> &Self::Target {
-        &self.0
+        self.0
     }
 }
 
-impl TryFrom<&Link> for DateTime<Local> {
+impl<'a> TryFrom<&Link<'a>> for DateTime<Local> {
     type Error = anyhow::Error;
     fn try_from(value: &Link) -> Result<Self, Self::Error> {
         let s = value.0.split("/").last().context("no link")?;
@@ -514,7 +514,7 @@ impl TryFrom<&Link> for DateTime<Local> {
 }
 
 fn decode(
-    queue: Arc<Mutex<VecDeque<Pcm>>>,
+    queue: Arc<RwLock<VecDeque<Pcm>>>,
     req: Client,
     pref: Prefecture,
     station_id: String,
@@ -542,42 +542,48 @@ fn decode(
     let links = text
         .lines()
         .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
-        .filter(|link|
-            // let l = Link(link.to_string()).to_datetime().ok()?;
-            // if queue
-            //     .lock()
-            //     .unwrap()
-            //     .iter()
-            //     .filter_map(|p| p.link.to_datetime().ok())
-            //     .all(|q| l > q)
-            queue.lock().unwrap().iter().all(|p| p.link.ne(*link)))
+        .inspect(|l| println!("{l}"))
+        .filter_map(|link| {
+            let datetime = Link(link).to_datetime().ok()?;
+            // dbg!(datetime);
+            let queue = queue.read().unwrap();
+            if queue.is_empty() {
+                return Some((datetime, link));
+            }
+            if queue.iter().last()?.datetime < datetime {
+                return Some((datetime, link));
+            }
+            None
+        })
         .collect::<Vec<_>>();
 
-    // dbg!(&links);
+    dbg!(&links);
 
     let mut handles = vec![];
-    for link in links {
+    for (datetime, link) in links {
         let link = link.to_string();
         let handle = thread::spawn(move || -> Result<Pcm> {
             let res = reqwest::blocking::get(&link)?;
             let bytes = res.bytes()?;
 
             let mut decoder = Decoder::new(Transport::Adts);
-            decoder.fill(&bytes).map_err(|e| anyhow!(e))?;
             let mut data = Cursor::new(vec![]);
+            for byte in bytes.chunks(2048) {
+                decoder.fill(&byte).map_err(|e| anyhow!(e))?;
 
-            let mut buf = [0; 4 * 1024];
-            loop {
-                if let Err(_) = decoder.decode_frame(&mut buf) {
-                    break;
+                let mut buf = [0; 8 * 1024];
+                loop {
+                    if let Err(_) = decoder.decode_frame(&mut buf) {
+                        break;
+                    }
+                    let size = decoder.decoded_frame_size();
+                    let s = unsafe { slice::from_raw_parts(buf.as_ptr() as *const u8, size * 2) };
+                    data.write_all(s)?;
                 }
-                let size = decoder.decoded_frame_size();
-                let s = unsafe { slice::from_raw_parts(buf.as_ptr() as *const u8, size * 2) };
-                data.write_all(s)?;
             }
 
             Ok(Pcm {
-                link: Link(link),
+                datetime,
                 data: data.into_inner(),
             })
         });
@@ -586,7 +592,7 @@ fn decode(
 
     for handle in handles {
         let pcm = handle.join().unwrap()?;
-        queue.lock().unwrap().push_back(pcm);
+        queue.write().unwrap().push_back(pcm);
     }
 
     Ok(())
@@ -601,7 +607,7 @@ pub fn realtime_parts_link(
     let lsid = generate_random_id();
     let req = Client::builder().cookie_store(true).build()?;
 
-    let queue = Arc::new(Mutex::new(VecDeque::<Pcm>::new()));
+    let queue = Arc::new(RwLock::new(VecDeque::<Pcm>::new()));
 
     let spec = Spec {
         format: Format::S16le,
@@ -629,13 +635,14 @@ pub fn realtime_parts_link(
         let token = token.clone();
         thread::spawn(move || decode(q, req, pref, station_id, lsid, token));
 
-        let mut q = queue.lock().unwrap();
-        let v = q.iter().map(|q| &q.link).collect::<Vec<_>>();
+        let mut q = queue.write().unwrap();
+        let v = q.iter().map(|q| &q.datetime).collect::<Vec<_>>();
         dbg!(v);
         if let Some(ref mut p) = q.pop_front() {
             ps.write(&p.data)?;
             // ps.drain()?;
         } else {
+            drop(q);
             thread::sleep(Duration::from_secs(1));
         }
     }
