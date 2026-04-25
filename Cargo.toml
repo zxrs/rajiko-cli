@@ -11,7 +11,7 @@ fdk-aac = "=0.8.0"
 indicatif = "=0.18.4"
 libpulse-binding = "=2.30.1"
 libpulse-simple-binding = "=2.29.0"
-rand = "=0.10.0"
-reqwest = { version = "=0.13.2", features = ["cookies", "blocking"] }
+rand = "=0.10.1"
+reqwest = { version = "=0.13.2", default-features = false, features = ["native-tls", "cookies", "blocking"] }
 serde = { version = "=1.0.228", features = ["derive"] }
 serde-xml-rs = "=0.8.2"
