@@ -542,58 +542,66 @@ fn decode(
     let links = text
         .lines()
         .filter(|line| !line.starts_with("#") && !line.trim().is_empty())
-        .inspect(|l| println!("{l}"))
-        .filter_map(|link| {
-            let datetime = Link(link).to_datetime().ok()?;
-            // dbg!(datetime);
-            let queue = queue.read().unwrap();
-            if queue.is_empty() {
-                return Some((datetime, link));
-            }
-            if queue.iter().last()?.datetime < datetime {
-                return Some((datetime, link));
-            }
-            None
-        })
+        // .inspect(|l| println!("{l}"))
+        // .filter_map(|link| {
+        //     let datetime = Link(link).to_datetime().ok()?;
+        //     // dbg!(datetime);
+        //     let queue = queue.read().unwrap();
+        //     if queue.is_empty() {
+        //         return Some((datetime, link));
+        //     }
+        //     if queue.iter().last()?.datetime < datetime {
+        //         return Some((datetime, link));
+        //     }
+        //     None
+        // })
         .collect::<Vec<_>>();
 
     dbg!(&links);
 
-    let mut handles = vec![];
-    for (datetime, link) in links {
-        let link = link.to_string();
-        let handle = thread::spawn(move || -> Result<Pcm> {
-            let res = reqwest::blocking::get(&link)?;
-            let bytes = res.bytes()?;
+    // let mut handles = vec![];
+    // for (datetime, link) in links {
+    //     let link = link.to_string();
+    //     let handle = thread::spawn(move || -> Result<Pcm> {
+    let link = links.first().context("no last")?;
 
-            let mut decoder = Decoder::new(Transport::Adts);
-            let mut data = Cursor::new(vec![]);
-            for byte in bytes.chunks(2048) {
-                decoder.fill(&byte).map_err(|e| anyhow!(e))?;
+    let res = reqwest::blocking::get(*link)?;
+    let bytes = res.bytes()?;
 
-                let mut buf = [0; 8 * 1024];
-                loop {
-                    if let Err(_) = decoder.decode_frame(&mut buf) {
-                        break;
-                    }
-                    let size = decoder.decoded_frame_size();
-                    let s = unsafe { slice::from_raw_parts(buf.as_ptr() as *const u8, size * 2) };
-                    data.write_all(s)?;
-                }
+    let mut decoder = Decoder::new(Transport::Adts);
+    let mut data = Cursor::new(vec![]);
+    for byte in bytes.chunks(2048) {
+        decoder.fill(&byte).map_err(|e| anyhow!(e))?;
+
+        let mut buf = [0; 8 * 1024];
+        loop {
+            if let Err(_) = decoder.decode_frame(&mut buf) {
+                break;
             }
-
-            Ok(Pcm {
-                datetime,
-                data: data.into_inner(),
-            })
-        });
-        handles.push(handle);
+            let size = decoder.decoded_frame_size();
+            let s = unsafe { slice::from_raw_parts(buf.as_ptr() as *const u8, size * 2) };
+            data.write_all(s)?;
+        }
     }
 
-    for handle in handles {
-        let pcm = handle.join().unwrap()?;
-        queue.write().unwrap().push_back(pcm);
-    }
+    let datetime = Link(link).to_datetime()?;
+    queue.write().unwrap().push_back(Pcm {
+        datetime,
+        data: data.into_inner(),
+    });
+
+    //         Ok(Pcm {
+    //             datetime,
+    //             data: data.into_inner(),
+    //         })
+    //     });
+    //     handles.push(handle);
+    // }
+
+    // for handle in handles {
+    //     let pcm = handle.join().unwrap()?;
+    //     queue.write().unwrap().push_back(pcm);
+    // }
 
     Ok(())
 }
@@ -627,13 +635,29 @@ pub fn realtime_parts_link(
         None,
     )?;
 
+    let q = Arc::clone(&queue);
+    // let req = req.clone();
+    let station_id = station_id.to_string();
+    // let lsid = lsid.clone();
+    // let token = token.clone();
+    thread::spawn(move || {
+        loop {
+            println!("start");
+            _ = decode(
+                q.clone(),
+                req.clone(),
+                pref,
+                station_id.clone(),
+                lsid.clone(),
+                token.clone(),
+            );
+            println!("end");
+            thread::sleep(Duration::from_millis(5000));
+        }
+    });
+
     loop {
-        let q = Arc::clone(&queue);
-        let req = req.clone();
-        let station_id = station_id.to_string();
-        let lsid = lsid.clone();
-        let token = token.clone();
-        thread::spawn(move || decode(q, req, pref, station_id, lsid, token));
+        // thread::sleep(Duration::from_secs(5));
 
         let mut q = queue.write().unwrap();
         let v = q.iter().map(|q| &q.datetime).collect::<Vec<_>>();
@@ -643,7 +667,7 @@ pub fn realtime_parts_link(
             // ps.drain()?;
         } else {
             drop(q);
-            thread::sleep(Duration::from_secs(1));
+            thread::sleep(Duration::from_millis(2500));
         }
     }
 
