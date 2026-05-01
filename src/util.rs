@@ -4,7 +4,7 @@ use crate::{
     xml::{Prog, Programs, Radiko, Station, Station_, Stations, Urls},
 };
 use anyhow::{Context, Result, anyhow, ensure};
-use base64::{Engine, engine::general_purpose};
+use base64::{Engine, engine::general_purpose, write::EncoderWriter};
 use chrono::{DateTime, Datelike, Local, NaiveDate, TimeDelta, TimeZone, Weekday};
 use fdk_aac::dec::{Decoder, Transport};
 use indicatif::{ProgressBar, ProgressStyle};
@@ -24,7 +24,7 @@ use std::{
     slice,
     sync::{Arc, Mutex, RwLock, mpsc},
     thread,
-    time::Duration,
+    time::{Duration, Instant},
 };
 
 const AUTH1_URL: &str = "https://radiko.jp/v2/api/auth1";
@@ -563,7 +563,7 @@ fn decode(
     // for (datetime, link) in links {
     //     let link = link.to_string();
     //     let handle = thread::spawn(move || -> Result<Pcm> {
-    let link = links.first().context("no last")?;
+    let link = links.last().context("no last")?;
 
     let res = reqwest::blocking::get(*link)?;
     let bytes = res.bytes()?;
@@ -643,6 +643,7 @@ pub fn realtime_parts_link(
     thread::spawn(move || {
         loop {
             println!("start");
+            let start = Instant::now();
             _ = decode(
                 q.clone(),
                 req.clone(),
@@ -651,7 +652,7 @@ pub fn realtime_parts_link(
                 lsid.clone(),
                 token.clone(),
             );
-            println!("end");
+            println!("end: {:?}", start.elapsed());
             thread::sleep(Duration::from_millis(5000));
         }
     });
@@ -660,9 +661,10 @@ pub fn realtime_parts_link(
         // thread::sleep(Duration::from_secs(5));
 
         let mut q = queue.write().unwrap();
-        let v = q.iter().map(|q| &q.datetime).collect::<Vec<_>>();
-        dbg!(v);
+        // let v = q.iter().map(|q| &q.datetime).collect::<Vec<_>>();
+        // dbg!(v);
         if let Some(ref mut p) = q.pop_front() {
+            drop(q);
             ps.write(&p.data)?;
             // ps.drain()?;
         } else {
