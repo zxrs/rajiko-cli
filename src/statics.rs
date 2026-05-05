@@ -1,5 +1,3 @@
-include!("key.rs");
-
 pub const VERSION_MAP: [Version; 13] = [
     VERSION_7_0_0,
     VERSION_7_1_0,
