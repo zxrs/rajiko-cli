@@ -1,6 +1,6 @@
 use crate::{
     prefecture::{AREA, Prefecture},
-    statics::{APP_VERSION_MAP, ASMARTPHONE8_FULLKEY_B64, MODEL_LIST, VERSION_MAP},
+    statics::{APP_VERSION_MAP, MODEL_LIST, VERSION_MAP},
     xml::{Prog, Programs, Radiko, Station, Stations, Urls},
 };
 use anyhow::{Context, Result, ensure};
@@ -19,6 +19,7 @@ use std::{
 
 const AUTH1_URL: &str = "https://radiko.jp/v2/api/auth1";
 const AUTH2_URL: &str = "https://radiko.jp/v2/api/auth2";
+const ASMARTPHONE8_FULLKEY: &[u8] = include_bytes!("key");
 
 pub struct Token(String);
 
@@ -117,9 +118,11 @@ pub fn login(pref: Prefecture) -> Result<Token> {
         .to_str()?
         .parse::<usize>()?;
 
-    let decoded = general_purpose::STANDARD_NO_PAD.decode(ASMARTPHONE8_FULLKEY_B64)?;
-    let partial = general_purpose::STANDARD
-        .encode(decoded.get(offset..offset + len).context("invalid range")?);
+    let partial = general_purpose::STANDARD.encode(
+        ASMARTPHONE8_FULLKEY
+            .get(offset..offset + len)
+            .context("invalid range")?,
+    );
     // dbg!(&token, offset, len, &partial);
 
     let res = req
