@@ -665,11 +665,13 @@ pub fn realtime_parts_link(
         // dbg!(v);
         if let Some(ref mut p) = q.pop_front() {
             drop(q);
+            println!("play");
             ps.write(&p.data)?;
+            println!("wait");
             // ps.drain()?;
         } else {
             drop(q);
-            thread::sleep(Duration::from_millis(2500));
+            thread::sleep(Duration::from_millis(4500));
         }
     }
 
